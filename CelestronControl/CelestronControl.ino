@@ -68,7 +68,7 @@ int highTime = 100; //us
 int lowTime = 100; //us
 int sampleTime = 10; //Should be ~10us less than a factor of lowTime
 int sampleTimeShiftVal = 2; //Rightshifting is much cheaper than dividing; 2^this is how many samples per interval
-int sensorThreshold = 500;
+int sensorThreshold = 200;
 
 int hypersample = 1; //Number of samples to be taken during each sampleSensor() call; this is explicitly intended to be changed during operation
 
@@ -172,6 +172,7 @@ long currentAzm = -1;
 long currentAlt = -1;
 
 #include <TimerOne.h>
+#include <TimerThree.h>
 volatile bool transmitting = false;
 
 void setup()
@@ -182,6 +183,10 @@ void setup()
   Timer1.initialize(100);
   Timer1.attachInterrupt(transmit_timer_tick);
   Timer1.stop();
+
+  Timer3.initialize(25);
+  Timer3.attachInterrupt(fill_analog_buffer);
+  Timer3.stop();
   
 
   
@@ -229,12 +234,13 @@ void setup()
 
   long azmTarget = 1000000;
   long altTarget = 1000000;
+
+  Timer3.start();
 }
 
 void loop() // run over and over
 {
- 
-
+  decode_msg_buffer();
   if(Serial.available() > 0){
     byte incomingByte = Serial.read();
 
@@ -346,15 +352,10 @@ void loop() // run over and over
     if(incomingByte == '<'){
       Serial.println("Waiting for msg:");
       while(Serial.available()) Serial.read(); //For no obvious reason, not clearing the Serial buffer prior to listening causes weird timing bugs
-      int charsRead = listen_for_msg();
 
-      if(charsRead != -1){
-        Serial.println(charsRead);
-        Serial.print(msgBuf);
-        clearMsgBuf();
-      }else{
-        Serial.println(0);
-      }
+      decode_msg_buffer();
+      print_message_buffer();
+      print_buffer();
     }
 
     if(incomingByte == '*'){
